@@ -3,6 +3,7 @@ from PyQt6.QtGui import QPixmap, QPainter, QPen
 from PyQt6.QtCore import Qt, QPoint
 from PyQt6 import uic
 import math
+import json
 
 from structure import structure
 import generalUtils
@@ -14,7 +15,10 @@ class ProcessWizardWindow(QMainWindow):
         self.current_level_id = 0
         self.current_image_path = None
         self.drawing_enabled = False
-        
+        self.current_aciton_id = 0
+        self.current_object_id = 0
+        self.actions = []
+        self.objects = []
 
         self.current_polygon_points = []
         
@@ -22,7 +26,48 @@ class ProcessWizardWindow(QMainWindow):
         self.draw_polygon_pushButton.clicked.connect(self.enable_drawing)
         self.add_basic_object_pushButton.clicked.connect(self.open_add_basic_object_form)
         self.add_basic_action_pushButton.clicked.connect(self.open_add_basic_action_form)
+        self.next_level_pushButton.clicked.connect(self.go_to_next_level)
+        self.save_pushButton.clicked.connect(self.save)
 
+    def save(self):
+        self.save_actions_to_json('actions.json')
+        self.save_objects_to_json('objects.json')
+    
+
+    def actions_to_dict(self,actions) :
+        return {
+            'actions': [action.to_dict() for action in actions]
+        }
+
+    def save_actions_to_json(self, filename):
+        print('saving')
+        combined_dict = self.actions_to_dict(self.actions)
+        with open(filename, 'w') as file:
+            json.dump(combined_dict, file, indent=4)
+        print(f"Data saved to {filename}")
+    
+    def objects_to_dict(self, objects):
+        return{
+            'objects' : [obj.to_dict() for obj in objects]
+        }
+    
+    def save_objects_to_json(self, filename):
+        combined_dict = self.objects_to_dict(self.objects)
+        with open(filename, 'w') as file:
+            json.dump(combined_dict, file, indent=4)
+        print(f"Data saved to {filename}")
+
+
+
+    def go_to_next_level(self):
+        self.current_level_id += 1
+        self.current_image_path = ''
+        self.current_polygon_points = []
+        self.clear_image()
+
+    def clear_image(self):
+        # Clear the image by setting an empty QPixmap
+        self.image_label.setPixmap(QPixmap())
 
     def open_add_basic_object_form(self):
         dialog = BasicObjectForm(self)
@@ -30,17 +75,30 @@ class ProcessWizardWindow(QMainWindow):
 
         # Get the returned data if the dialog was accepted
         if dialog.result() == QDialog.DialogCode.Accepted:
+            # if len(self.objects) == 0:
+            #     self.objects.append(structure.ComposedObjects(1, self.current_level_id, self.current_level_id+1))
             data = dialog.get_form_data()
             print("Form Data:", data)  # You can now use the data in the main window
+            basic_object = structure.BasicObject(self.current_object_id, self.current_level_id,data['name'], data['color'], data['serial_number'], data['weight'], data['bucket'], data['quality'])
+            self.objects.append(basic_object)
+
 
     def open_add_basic_action_form(self):
+        
         dialog = BasicActionForm(self)
         dialog.exec()  # Open the form as a modal dialog
 
         # Get the returned data if the dialog was accepted
         if dialog.result() == QDialog.DialogCode.Accepted:
+            if len(self.actions) == 0:
+                self.actions.append(structure.ComposedAction())
             data = dialog.get_form_data()
             print("Form Data:", data)  # You can now use the data in the main window
+            polygon_points = [[p.x(), p.y()] for p in self.current_polygon_points]
+            basic_action = structure.BasicAction(self.current_aciton_id, data['time'], None,data['tool'], polygon_points, self.current_level_id , self.current_level_id +1, data['anomaly_action'], self.current_image_path )
+            self.current_aciton_id += 1
+            print(basic_action.to_dict())
+            self.actions[-1].actions.append(basic_action)
 
 
     def open_image(self):
@@ -64,6 +122,7 @@ class ProcessWizardWindow(QMainWindow):
 
     def enable_drawing(self):
         self.drawing_enabled = True
+        self.current_polygon_points = []
         self.image_label.mousePressEvent = self.mousePressEvent
         print('drawing enabled')
         # self.image_label.mouseReleaseEvent = self.mouseReleaseEvent
